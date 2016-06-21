@@ -14,6 +14,8 @@ import urllib
 import urlparse
 
 # Set up configuration
+from ss.exceptions import TokenException
+
 project_path = os.path.realpath(os.path.dirname(__file__))
 #project_path='/django/idm/ss/'
 config_file = os.path.join(project_path, 'config.ini')
@@ -43,21 +45,21 @@ def index(request):
 
 
 def send_recovery_email(request):
-"""
-This function generates an email with a URL link that allows the user to perform a password recovery and reset.
-"""
+    """
+    This function generates an email with a URL link that allows the user to perform a password recovery and reset.
+    """
     class PasswordRecoveryForm(forms.Form):
         username = forms.CharField(label='Enter your username:', validators=[RegexValidator('^[a-zA-Z0-9]*$', message='Invalid username', code='invalid_username')])
 
     try:
         if request.method == 'GET':
             form = PasswordRecoveryForm()    
-	    return render(request, 'ss/recover.html', {'form': form})
+            return render(request, 'ss/recover.html', {'form': form})
 
         elif request.method == 'POST':
             form = PasswordRecoveryForm(request.POST)    
 
-	    if form.is_valid():
+        if form.is_valid():
                 username = form.cleaned_data.get('username')
                 email, token = utils.set_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username)
                 subject = 'Password Recovery'
@@ -79,10 +81,10 @@ A request to recover your password has been received.
 If you did not request this, please contact the administrators of the system.
 If you did, you can complete the recovery process by clicking on the following link...
 https://%s%s/%s/ 
-    	        ''' % (request.get_host(), baseurl, token)
+                ''' % (request.get_host(), baseurl, token)
                 utils.send_email(email_server, email_port, email_local_hostname, email_username, email_password, email, email_fromaddr, subject, message)
                 content = 'Sent to email address associated with user, %s.' % username
-		return render(request, 'ss/email_success.html', {'content': content})
+                return render(request, 'ss/email_success.html', {'content': content})
 
     except Exception as e:
        log.error(e)
@@ -92,9 +94,9 @@ https://%s%s/%s/
     return render(request, 'ss/recover.html', {'form': form})
  
 def reset_password(request, token):
-"""
-Using the unique token supplied, this function allows the user to set his/her password without knowing their previous password.  Between the token and valid username, the user will be able to set his/her password.
-"""
+    """
+    Using the unique token supplied, this function allows the user to set his/her password without knowing their previous password.  Between the token and valid username, the user will be able to set his/her password.
+    """
     class ResetPasswordForm(forms.Form):
         username = forms.CharField(label='Enter your username:', validators=[RegexValidator('^[a-zA-Z0-9]*$', message='Invalid username', code='invalid_username')])
         passwd  = forms.CharField(label='New Password:', widget=forms.PasswordInput)
@@ -125,37 +127,45 @@ Using the unique token supplied, this function allows the user to set his/her pa
             try:
                 utils.reset_passwd_by_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, token, password)
             except Exception as e:
-                err = 'Failed to reset password for %s.  The caught exception was %s' % (username, e)
+                err = 'Failed to reset password for %s.  The caught exception was %s' % (username, e.message)
                 log.error(err)
+                log.error(e.__class__.__name__)
                 info=''
                 desc=''
                 msg=''
+                error_page='ss/error.html'
 
                 if isinstance(e, ldap.CONSTRAINT_VIOLATION):
-		    info = e.message['info']
-		    desc = e.message['desc']
+                    info = e.message['info']
+                    desc = e.message['desc']
                     msg =  '''Unable to reset your password, %s (%s).''' % (info, desc)
+                elif isinstance(e, TokenException):
+                    error_page='ss/token_error.html'
+                    msg = e.message
+                else:
+                    error_page='ss/token_error.html'
+                    msg = e.message
 
                 try:
-                    utils.record_recovery_status(username, 'ERROR')
-		except Exception as e:
-	            log.error(e)
+                    utils.record_recovery_status(username, 'ERROR: ' + e.message)
+                except Exception as e:
+                    log.error(e)
 
-                return render(request, 'ss/error.html', {'content': msg})
+                return render(request, error_page, {'content': msg})
                 
             try:
                 utils.record_recovery_status(username, 'RESET')
             except Exception as e:
-	        log.error(e)
+                log.error(e)
 
-	    return render(request, 'ss/recovered_success.html')
+        return render(request, 'ss/recovered_success.html')
 
     return render(request, 'ss/recover.html', {'form': form})
         
 def change_password(request):
-"""
-This function changes the user's password using user inputs of username, current password, and new password with confirmation.
-"""
+    """
+    This function changes the user's password using user inputs of username, current password, and new password with confirmation.
+    """
     class ChangePasswordForm(forms.Form):
         username = forms.CharField(label='Enter your username:', validators=[RegexValidator('^[a-zA-Z0-9]*$', message='Invalid username', code='invalid_username')])
         old_passwd  = forms.CharField(label='Current Password:', widget=forms.PasswordInput)
@@ -186,25 +196,23 @@ This function changes the user's password using user inputs of username, current
                 username = form.cleaned_data.get('username')
                 old = form.cleaned_data.get('old_passwd')
                 new = form.cleaned_data.get('passwd')
-                #userdn = utils.get_userdn(ldap_host, ldap_dn, username)
-                log.debug('User, %s, found. Ready to change password from %s to %s.' % (username, old, new))
                 utils.change_password(ldap_host, ldap_dn, username, old, new)
                 return render(request, 'ss/password_change_success.html')
 
             except Exception as e:
                 log.error(e)
-                err = 'Failed to reset password for %s.  The caught exception was %s' % (username, e)
+                err = 'Failed to reset password for %s.  The caught exception was %s' % (username, e.message)
                 log.error(err)
                 info=''
                 desc=''
                 msg=''
 
                 if isinstance(e, ldap.CONSTRAINT_VIOLATION):
-		    info = e.message['info']
-		    desc = e.message['desc']
+                    info = e.message['info']
+                    desc = e.message['desc']
                     msg =  '''Unable to reset your password, %s (%s).''' % (info, desc)
 
-                return render(request, 'ss/error.html', {'content': msg})
+                    return render(request, 'ss/error.html', {'content': msg})
 
     return render(request, 'ss/change_password.html', {'form': form})
 

@@ -9,6 +9,8 @@ import time
 import os
 import random, string
 
+from ss.exceptions import TokenException
+
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
@@ -32,7 +34,7 @@ def set_token(host, admin, cred, dn, user):
     try:
         ldap.set_option(ldap.OPT_DEBUG_LEVEL,255)
         url = 'ldaps://%s:636' % host
-	l = ldap.initialize(url)
+        l = ldap.initialize(url)
         log.debug("***Connecting to %s as %s %s" % (url,admin,cred))
         l.simple_bind_s(admin, cred)
         log.debug("***Bind successful***")
@@ -43,36 +45,36 @@ def set_token(host, admin, cred, dn, user):
         token = ''
 
         # The result set should only have a single, valid entry or none
-	result_type, result_data = l.result(id,1)
-	if (result_data == []):
-	    raise ldap.LDAPError('%s not a valid user' % user)
+        result_type, result_data = l.result(id,1)
+        if (result_data == []):
+            raise ldap.LDAPError('%s not a valid user' % user)
         else:
-	    log.debug(result_data)
-	    record=result_data[0][1]
-	    userdn = result_data[0][0]
-	    log.debug('Found dn, %s for user %s', userdn, user)
-	    logging.debug(record)
-	    email = record['mail'][0]
-	    log.debug(record['mail'][0])
-	    log.debug(record['uid'][0])
+            log.debug(result_data)
+            record=result_data[0][1]
+            userdn = result_data[0][0]
+            log.debug('Found dn, %s for user %s', userdn, user)
+            logging.debug(record)
+            email = record['mail'][0]
+            log.debug(record['mail'][0])
+            log.debug(record['uid'][0])
 
-	    # Create a temporary token using a time stamp and the username
-	    now = datetime.datetime.utcnow().strftime(timeformat)
-	    token = base64.urlsafe_b64encode(now)
-	    
-	    if token_attr in record:
-	        mod_attrs = [( ldap.MOD_REPLACE, token_attr, token)]
-	        l.modify_s(userdn, mod_attrs)
-	    else:
-	        mod_attrs = [( ldap.MOD_ADD, token_attr, token)]
-	        l.modify_s(userdn, mod_attrs)
-	
+            # Create a temporary token using a time stamp and the username
+            now = datetime.datetime.utcnow().strftime(timeformat)
+            token = base64.urlsafe_b64encode(now)
+
+        if token_attr in record:
+            mod_attrs = [( ldap.MOD_REPLACE, token_attr, token)]
+            l.modify_s(userdn, mod_attrs)
+        else:
+            mod_attrs = [( ldap.MOD_ADD, token_attr, token)]
+            l.modify_s(userdn, mod_attrs)
+
             # RLJ look into compare() function for token
-	    # RLJ consider using the _ext_s for LDAPv3, synchronous 
-	 
+        # RLJ consider using the _ext_s for LDAPv3, synchronous
+
         l.unbind_s()
         return (email, token)
-		    		    
+
        
     except ldap.LDAPError,e:
         # RLJ TODO
@@ -93,58 +95,51 @@ def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd):
 
     try:
         url = 'ldaps://%s:636' % host
-	l = ldap.initialize(url)
+        l = ldap.initialize(url)
         l.simple_bind_s(admin, cred)
         filter='uid=%s' % user
         attr=['uid', 'mail', token_attr]
         id = l.search(dn, ldap.SCOPE_SUBTREE, filter, attr)
 
         # Get only one record from list, since there is only one user for a particular uid
-	result_type, result_data = l.result(id,1)
+        result_type, result_data = l.result(id,1)
 
         temp_password_set = False
 
         userdn=''
-	if (result_data != []):
-	    record = result_data[0][1]
-	    userdn = result_data[0][0]
+
+        if (result_data != []):
+            record = result_data[0][1]
+            userdn = result_data[0][0]
             valid_token = record[token_attr][0]
 
             log.debug(userdn)
 
             if (token == valid_token):
-	        log.debug('Verified token, valid=%s and url-based=%s', valid_token, token)
+                log.debug('Verified token, valid=%s and url-based=%s', valid_token, token)
 
                 # Test token for expiration
                 token_time = datetime.datetime.strptime(base64.urlsafe_b64decode(valid_token), timeformat)
-		expire_time = datetime.timedelta(seconds=900)
+                expire_time = datetime.timedelta(seconds=900)
                 now = datetime.datetime.utcnow()
-		delta = now - token_time
+                delta = now - token_time
 
-		if expire_time > delta:
+                if expire_time > delta:
                     # RLJ - change the user's password
- 	            l.passwd_s(userdn, None, tmp_password)
-        	    temp_password_set = True
+                    l.passwd_s(userdn, None, tmp_password)
+                    temp_password_set = True
                     log.debug('Changed user password to temporary password')
                 
-	            #mod_attrs = [( ldap.MOD_REPLACE, 'krbPasswordExpiration', now),
-	            #             ( ldap.MOD_REPLACE, 'krbLoginFailedCount', 0)]
-    
-                    # Reset failed logins...
-	            #mod_attrs = [( ldap.MOD_REPLACE, 'krbLoginFailedCount', 0),
-	            #            ( ldap.MOD_REPLACE, 'krbPasswordExpiration', now)]
-
-		    #l.modify_s(userdn, mod_attrs)
-
                 else:
-		    # User did not respond to email soon enough
-	            mod_attrs = [( ldap.MOD_DELETE, token_attr, None)]
-		    l.modify_s(userdn, mod_attrs)
+                    # User did not respond to email soon enough
+                    mod_attrs = [( ldap.MOD_DELETE, token_attr, None)]
+                    l.modify_s(userdn, mod_attrs)
                     log.debug('User too slow in responding to email.')
-                    raise Exception('Token expired')
+                    raise TokenException('Token expired')
             
             else:
-                log.debug('Token not verified')
+                log.error('Token not verified')
+                raise Exception('Token not verified')
 
         l.unbind_s()
     
@@ -153,8 +148,8 @@ def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd):
             userconn = ldap.initialize(url)
             log.debug('Binding as user, %s' % userdn)
             userconn.simple_bind_s(userdn,tmp_password)
- 	    userconn.passwd_s(userdn, tmp_password, passwd)
-	    userconn.unbind_s()
+            userconn.passwd_s(userdn, tmp_password, passwd)
+            userconn.unbind_s()
 
     except ldap.LDAPError as e:
         # RLJ TODO
@@ -235,8 +230,8 @@ def get_userdn(host, dn, userid):
         if (result_data == []):
             raise ldap.LDAPError('%s not a valid user' % userid)
         else:
-	    userdn = result_data[0][0]
-	    log.debug('Found dn, %s for user %s', userdn, userid)
+            userdn = result_data[0][0]
+            log.debug('Found dn, %s for user %s', userdn, userid)
             return userdn
 
     except ldap.LDAPError as e:
