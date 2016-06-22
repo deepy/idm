@@ -1,3 +1,4 @@
+from django.views.generic.base import RedirectView
 from django.conf.urls import patterns, include, url
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
  
@@ -22,8 +23,12 @@ urlpatterns = patterns('',
     url(r'^change_password.html$', 'ss.views.change_password', name='change_password'),
     
     # Password Recovery
-    url(r'^recover.html$', 'ss.views.send_recovery_email', name='send_recovery_email'),
-    url(r'^(?P<token>.*)/$', 'ss.views.reset_password', name='reset_password'),
+    #url(r'^recover.html$', 'ss.views.send_recovery_email', name='send_recovery_email'),
+    url(r'^recover.html$', RedirectView.as_view(url='recover/', permanent=False)),
+    #url(r'^(?P<token>.*)/$', 'ss.views.reset_password', name='reset_password'),
+    #url(r'^recover/[=0-9a-zA-Z_-]{0,19}/$', 'ss.views.send_recovery_email', name='send_recovery_email'),
+    url(r'^recover/$', 'ss.views.send_recovery_email', name='send_recovery_email'),
+    url(r'^recover/(?P<token>[=0-9a-zA-Z_-]{20})/$', 'ss.views.reset_password', name='reset_password'),
 )
 
 urlpatterns += staticfiles_urlpatterns()

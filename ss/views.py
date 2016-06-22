@@ -66,10 +66,11 @@ def send_recovery_email(request):
                 full_path = request.get_full_path()
                 parsed_url = urlparse.urlparse(full_path)
 
-                pathparts = str.split(str(parsed_url.path),'/')                
+                pathparts = str.split(str(parsed_url.path),'/')
 
-                pathparts = pathparts[0:len(pathparts)-1]
-                baseurl = '/'.join(pathparts) 
+                #RLJ
+                #pathparts = pathparts[0:len(pathparts)-1]
+                baseurl = '/'.join(pathparts)
              
                 #basepath = '/'.join(pathparts) 
                 #baseurl = '%s://%s/%s' % (urlparts.scheme, urlparts.netloc, basepath)
@@ -80,9 +81,10 @@ def send_recovery_email(request):
 A request to recover your password has been received.
 If you did not request this, please contact the administrators of the system.
 If you did, you can complete the recovery process by clicking on the following link...
-https://%s%s/%s/ 
+https://%s%s/%s
                 ''' % (request.get_host(), baseurl, token)
-                utils.send_email(email_server, email_port, email_local_hostname, email_username, email_password, email, email_fromaddr, subject, message)
+                log.error(message)
+                #utils.send_email(email_server, email_port, email_local_hostname, email_username, email_password, email, email_fromaddr, subject, message)
                 content = 'Sent to email address associated with user, %s.' % username
                 return render(request, 'ss/email_success.html', {'content': content})
 
@@ -205,14 +207,18 @@ def change_password(request):
                 log.error(err)
                 info=''
                 desc=''
-                msg=''
+                msg='Unable to change your password.'
 
-                if isinstance(e, ldap.CONSTRAINT_VIOLATION):
+                if (isinstance(e, ldap.CONSTRAINT_VIOLATION)):
                     info = e.message['info']
                     desc = e.message['desc']
-                    msg =  '''Unable to reset your password, %s (%s).''' % (info, desc)
+                    msg =  '''Unable to change your password, %s (%s).''' % (info, desc)
 
-                    return render(request, 'ss/error.html', {'content': msg})
+                if (isinstance(e, ldap.INVALID_CREDENTIALS)):
+                    desc = e.message['desc']
+                    msg =  '''Unable to change your password, %s.''' %  (desc)
+
+                return render(request, 'ss/error.html', {'content': msg})
 
     return render(request, 'ss/change_password.html', {'form': form})
 
