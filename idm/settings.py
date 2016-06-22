@@ -26,8 +26,9 @@ SECRET_KEY = '%rq)ttq2d4&a45(-%6ysj*-veu+r+st2ab%8(%8rvsxayb+%rm'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+#DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '10.20.0.100']
 
 
 # Application definition
@@ -110,7 +111,7 @@ LOGGING = {
     'disable_existing_loggers': False,
     'formatters': {
         'simple': {
-            'format': '%(levelname)s %(asctime)s %(module)s %(message)s'
+            'format': '[%(levelname)s %(asctime)s %(module)s:%(lineno)s - %(funcName)s] %(message)s'
         },
     },
     'handlers': {
