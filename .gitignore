@@ -72,3 +72,5 @@ input/
 *.conf
 *.bak
 *.pyc
+.idea
+db.sqlite3
