@@ -74,3 +74,7 @@ input/
 *.pyc
 .idea
 db.sqlite3
+*.*-prod
+*.*-orig
+*.*-bak
+*.*-bad
