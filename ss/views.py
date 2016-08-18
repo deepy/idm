@@ -35,6 +35,8 @@ email_username = config_parser.get('default', 'email_username')
 email_password = config_parser.get('default', 'email_password')
 email_fromaddr = config_parser.get('default', 'email_fromaddr')
 
+token_timeout_min = config_parser.getint('default', 'token_timeout_min')
+
 # Set up logging
 # log_file = os.path.join(project_path, 'password-recover.log')
 
@@ -81,11 +83,17 @@ def send_recovery_email(request):
 A request to recover your password has been received.
 If you did not request this, please contact the administrators of the system.
 If you did, you can complete the recovery process by clicking on the following link...
-https://%s%s/%s
-                ''' % (request.get_host(), baseurl, token)
+https://%s%s%s
+
+This link will expire within %d minutes.
+                ''' % (request.get_host(), baseurl, token, token_timeout_min)
                 log.error(message)
                 #utils.send_email(email_server, email_port, email_local_hostname, email_username, email_password, email, email_fromaddr, subject, message)
-                content = 'Sent to email address associated with user, %s.' % username
+                content = '''
+Sent to email address associated with user, %s.
+
+NOTE: The link in the email will expire in %d minutes.
+                ''' % (username, token_timeout_min)
                 return render(request, 'ss/email_success.html', {'content': content})
 
     except Exception as e:
@@ -127,7 +135,7 @@ def reset_password(request, token):
             password = form.cleaned_data.get('passwd') 
             confirm = form.cleaned_data.get('confirm')
             try:
-                utils.reset_passwd_by_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, token, password)
+                utils.reset_passwd_by_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, token, password, token_timeout_min)
             except Exception as e:
                 err = 'Failed to reset password for %s.  The caught exception was %s' % (username, e.message)
                 log.error(err)

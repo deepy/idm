@@ -81,7 +81,7 @@ def set_token(host, admin, cred, dn, user):
         log.error(e)
         raise e
 
-def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd):
+def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd, token_timeout_min=60):
     """
     This function validates the token, sets the user's password temporarily, and binds as the user to perform a proper password change as the user
     :param host: hostname of the LDAP directory service
@@ -120,7 +120,8 @@ def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd):
 
                 # Test token for expiration
                 token_time = datetime.datetime.strptime(base64.urlsafe_b64decode(valid_token), timeformat)
-                expire_time = datetime.timedelta(seconds=900)
+                #expire_time = datetime.timedelta(seconds=900)
+                expire_time = datetime.timedelta(minutes=token_timeout_min)
                 now = datetime.datetime.utcnow()
                 delta = now - token_time
 
