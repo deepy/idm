@@ -20,15 +20,20 @@ urlpatterns = patterns('',
     # url(r'^admin/', include(admin.site.urls)),
 
     # Password Change (when user knows passowrd)
-    url(r'^change_password.html$', 'ss.views.change_password', name='change_password'),
-    
+    url(r'^change_password/$', 'ss.views.change_password', name='change_password'),
+    url(r'^change_password.htm$', RedirectView.as_view(url='change_password/', permanent=False)),
+    url(r'^change_password.html$', RedirectView.as_view(url='change_password/', permanent=False)),
+    url(r'^change$', RedirectView.as_view(url='change_password/', permanent=False)),
+    url(r'^change/$', RedirectView.as_view(url='../change_password/', permanent=False)),
+
     # Password Recovery
-    #url(r'^recover.html$', 'ss.views.send_recovery_email', name='send_recovery_email'),
-    url(r'^recover.html$', RedirectView.as_view(url='recover/', permanent=False)),
-    #url(r'^(?P<token>.*)/$', 'ss.views.reset_password', name='reset_password'),
-    #url(r'^recover/[=0-9a-zA-Z_-]{0,19}/$', 'ss.views.send_recovery_email', name='send_recovery_email'),
-    url(r'^recover/$', 'ss.views.send_recovery_email', name='send_recovery_email'),
-    url(r'^recover/(?P<token>[=0-9a-zA-Z_-]{20})/$', 'ss.views.reset_password', name='reset_password'),
+    url(r'^recover_password/$', 'ss.views.send_recovery_email', name='send_recovery_email'),
+    url(r'^recover.html$', RedirectView.as_view(url='recover_password/', permanent=False)),
+    url(r'^recover.htm$', RedirectView.as_view(url='recover_password/', permanent=False)),
+    url(r'^recover$', RedirectView.as_view(url='recover_password/', permanent=False)),
+    url(r'^recover/$', RedirectView.as_view(url='../recover_password/', permanent=False)),
+
+    url(r'^recover_password/(?P<token>[=0-9a-zA-Z_-]{20})/$', 'ss.views.reset_password', name='reset_password'),
 )
 
 urlpatterns += staticfiles_urlpatterns()
