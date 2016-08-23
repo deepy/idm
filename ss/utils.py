@@ -21,6 +21,9 @@ recovery_log = os.path.join(os.path.dirname(__file__),'password_recovery.log')
 
 ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
 
+# Error Strings
+token_not_verified_error = 'The security token in the URL is invalid.  Please request a new, valid token from the password recovery link.'
+
 def set_token(host, admin, cred, dn, user):
     """
     Using the connection parameters and username, this function sets a unique token for the LDAP user.  This token will be used, in part, to verify the user requested a password recovery.
@@ -77,8 +80,7 @@ def set_token(host, admin, cred, dn, user):
 
        
     except ldap.LDAPError,e:
-        # RLJ TODO
-        log.error(e)
+        log.exception(e)
         raise e
 
 def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd, token_timeout_min=60):
@@ -94,11 +96,14 @@ def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd, token_time
     """
 
     try:
+        log.debug('*** reset password')
+
         url = 'ldaps://%s:636' % host
         l = ldap.initialize(url)
         l.simple_bind_s(admin, cred)
         filter='uid=%s' % user
         attr=['uid', 'mail', token_attr]
+        log.debug('*** searching for user, %s' % user)
         id = l.search(dn, ldap.SCOPE_SUBTREE, filter, attr)
 
         # Get only one record from list, since there is only one user for a particular uid
@@ -115,6 +120,7 @@ def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd, token_time
 
             log.debug(userdn)
 
+            log.debug('*** found user, %s' % userdn)
             if (token == valid_token):
                 log.debug('Verified token, valid=%s and url-based=%s', valid_token, token)
 
@@ -139,22 +145,31 @@ def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd, token_time
                     raise TokenException('Token expired')
             
             else:
-                log.error('Token not verified')
-                raise Exception('Token not verified')
+                log.debug("Token not valid")
+                log.error(token_not_verified_error)
+                raise Exception(token_not_verified_error)
+
+        else:
+            l.unbind_s()
+            raise Exception("User not found!")
 
         l.unbind_s()
-    
+
         # Login as user with new, temporary password and set password
         if temp_password_set:
-            userconn = ldap.initialize(url)
-            log.debug('Binding as user, %s' % userdn)
-            userconn.simple_bind_s(userdn,tmp_password)
-            userconn.passwd_s(userdn, tmp_password, passwd)
-            userconn.unbind_s()
+            try:
+                log.debug("Changing password.")
+                userconn = ldap.initialize(url)
+                log.debug('Binding as user, %s' % userdn)
+                userconn.simple_bind_s(userdn,tmp_password)
+                userconn.passwd_s(userdn, tmp_password, passwd)
+                userconn.unbind_s()
+            except Exception as e:
+                log.exception(e)
+                raise e
 
-    except ldap.LDAPError as e:
-        # RLJ TODO
-        log.error(e)
+    except Exception as e:
+        log.exception(e)
         raise e
 
 
@@ -181,7 +196,7 @@ def change_password(host, dn, username, old, new):
         userconn.unbind_s()
 
     except ldap.LDAPError as e:
-        log.error(e)
+        log.exception(e)
         raise e
 
 def send_email(server, port, local_hostname, username, password, to_addr, from_addr, subject, message):
@@ -229,14 +244,14 @@ def get_userdn(host, dn, userid):
         result_type, result_data = l.result(id,1)
     
         if (result_data == []):
-            raise ldap.LDAPError('%s not a valid user' % userid)
+            raise ldap.LDAPError('%s is not a valid user' % userid)
         else:
             userdn = result_data[0][0]
             log.debug('Found dn, %s for user %s', userdn, userid)
             return userdn
 
     except ldap.LDAPError as e:
-        log.error(e)
+        log.exception(e)
         raise e
     
    

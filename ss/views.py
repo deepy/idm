@@ -79,6 +79,14 @@ def send_recovery_email(request):
                 # RLJ TODO, hardcoded the https since behind a proxy with only 
                 # https, need to learn how to interrogate the request to learn
                 # if behind proxy.
+
+                token_timeout = token_timeout_min
+                token_timeout_units = 'minutes'
+
+                if (token_timeout_min > 60):
+                    #token_timeout = token_timeout_min/60
+                    token_timeout_units = 'hours'
+
                 message = '''
 A request to recover your password has been received.
 If you did not request this, please contact the administrators of the system.
@@ -97,7 +105,7 @@ NOTE: The link in the email will expire in %d minutes.
                 return render(request, 'ss/email_success.html', {'content': content})
 
     except Exception as e:
-       log.error(e)
+       log.exception(e)
        url = request.get_full_path()
        return render(request, 'ss/error.html', {'content': e, 'url': url})
 
@@ -108,38 +116,45 @@ def reset_password(request, token):
     Using the unique token supplied, this function allows the user to set his/her password without knowing their previous password.  Between the token and valid username, the user will be able to set his/her password.
     """
     class ResetPasswordForm(forms.Form):
-        username = forms.CharField(label='Enter your username:', validators=[RegexValidator('^[a-zA-Z0-9]*$', message='Invalid username', code='invalid_username')])
-        passwd  = forms.CharField(label='New Password:', widget=forms.PasswordInput)
-        confirm = forms.CharField(label='Confirm Password:', widget=forms.PasswordInput)
- 
+        username = forms.CharField(label='Enter your username:', required=True, validators=[RegexValidator('^[a-zA-Z0-9]*$', message='Invalid username', code='invalid_username')],)
+        passwd = forms.CharField(label='New Password:', required=True, widget=forms.PasswordInput)
+        confirm = forms.CharField(label='Confirm Password:', required=True, widget=forms.PasswordInput)
+
         def clean(self):
             # cleaned_data = super(ResetPasswordForm, self).clean()
             username = self.cleaned_data.get("username")
             passwd = self.cleaned_data.get("passwd")
             confirm = self.cleaned_data.get("confirm")
 
-            if username:
-                # Only do something if all fields are valid so far.
-                if passwd != confirm:
-                    raise forms.ValidationError("Passwords do not match!")
+            log.debug('Reseting %s with %s, %s' % (username, passwd, confirm))
+
+            if passwd != confirm:
+                log.debug("Passwords do not match!")
+                raise forms.ValidationError("Passwords do not match!")
 
             return self.cleaned_data
 
     if request.method == 'GET':
         form = ResetPasswordForm()
     elif request.method == 'POST':
+
         form = ResetPasswordForm(request.POST)
+
         if form.is_valid():
             token = urllib.unquote(token)
             username = form.cleaned_data.get('username')
             password = form.cleaned_data.get('passwd') 
             confirm = form.cleaned_data.get('confirm')
             try:
+                log.debug('Reseting %s with token %s' % (username, token))
                 utils.reset_passwd_by_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, token, password, token_timeout_min)
+                log.debug("*** recovered success.")
+                utils.record_recovery_status(username, 'RESET')
+                return render(request, 'ss/recovered_success.html')
             except Exception as e:
                 err = 'Failed to reset password for %s.  The caught exception was %s' % (username, e.message)
-                log.error(err)
-                log.error(e.__class__.__name__)
+                log.exception(err)
+                #log.error(e.__class__.__name__)
                 info=''
                 desc=''
                 msg=''
@@ -157,18 +172,11 @@ def reset_password(request, token):
                     msg = e.message
 
                 try:
-                    utils.record_recovery_status(username, 'ERROR: ' + e.message)
+                    utils.record_recovery_status(username, 'ERROR: ' + str(e.message))
                 except Exception as e:
-                    log.error(e)
+                    log.exception(e)
 
                 return render(request, error_page, {'content': msg})
-                
-            try:
-                utils.record_recovery_status(username, 'RESET')
-            except Exception as e:
-                log.error(e)
-
-        return render(request, 'ss/recovered_success.html')
 
     return render(request, 'ss/recover.html', {'form': form})
         
