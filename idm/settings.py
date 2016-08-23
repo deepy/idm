@@ -25,8 +25,8 @@ SITE_ROOT = os.path.dirname(os.path.realpath(__file__))
 SECRET_KEY = '%rq)ttq2d4&a45(-%6ysj*-veu+r+st2ab%8(%8rvsxayb+%rm'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-#DEBUG = True
-DEBUG = False
+DEBUG = True
+#DEBUG = False
 
 #ALLOWED_HOSTS = ['localhost', '127.0.0.1', '10.20.0.100']
 ALLOWED_HOSTS = ['localhost', 'ipa-services.example.com']
@@ -68,6 +68,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'idm.context.baseurl',
             ],
         },
     },

@@ -62,49 +62,51 @@ def send_recovery_email(request):
             form = PasswordRecoveryForm(request.POST)    
 
         if form.is_valid():
-                username = form.cleaned_data.get('username')
-                email, token = utils.set_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username)
-                subject = 'Password Recovery'
-                full_path = request.get_full_path()
-                parsed_url = urlparse.urlparse(full_path)
+            username = form.cleaned_data.get('username')
+            email, token = utils.set_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username)
+            subject = 'Password Recovery'
+            full_path = request.get_full_path()
+            parsed_url = urlparse.urlparse(full_path)
 
-                pathparts = str.split(str(parsed_url.path),'/')
+            pathparts = str.split(str(parsed_url.path),'/')
 
-                #RLJ
-                #pathparts = pathparts[0:len(pathparts)-1]
-                baseurl = '/'.join(pathparts)
-             
-                #basepath = '/'.join(pathparts) 
-                #baseurl = '%s://%s/%s' % (urlparts.scheme, urlparts.netloc, basepath)
-                # RLJ TODO, hardcoded the https since behind a proxy with only 
-                # https, need to learn how to interrogate the request to learn
-                # if behind proxy.
+            #RLJ
+            #pathparts = pathparts[0:len(pathparts)-1]
+            baseurl = '/'.join(pathparts)
 
-                token_timeout = token_timeout_min
-                token_timeout_units = 'minutes'
+            #basepath = '/'.join(pathparts)
+            #baseurl = '%s://%s/%s' % (urlparts.scheme, urlparts.netloc, basepath)
+            # RLJ TODO, hardcoded the https since behind a proxy with only
+            # https, need to learn how to interrogate the request to learn
+            # if behind proxy.
 
-                if (token_timeout_min > 60):
-                    #token_timeout = token_timeout_min/60
-                    token_timeout_units = 'hours'
+            token_timeout = token_timeout_min
+            token_timeout_units = 'minutes'
 
-                message = '''
+            if (token_timeout_min > 60):
+                #token_timeout = token_timeout_min/60
+                token_timeout_units = 'hours'
+
+            message = '''
 A request to recover your password has been received.
 If you did not request this, please contact the administrators of the system.
 If you did, you can complete the recovery process by clicking on the following link...
 https://%s%s%s
 
 This link will expire within %d minutes.
-                ''' % (request.get_host(), baseurl, token, token_timeout_min)
-                log.error(message)
-                #utils.send_email(email_server, email_port, email_local_hostname, email_username, email_password, email, email_fromaddr, subject, message)
-                content = '''
+            ''' % (request.get_host(), baseurl, token, token_timeout_min)
+            log.error(message)
+            #utils.send_email(email_server, email_port, email_local_hostname, email_username, email_password, email, email_fromaddr, subject, message)
+            content = '''
 Sent to email address associated with user, %s.
 
 NOTE: The link in the email will expire in %d minutes.
-                ''' % (username, token_timeout_min)
-                return render(request, 'ss/email_success.html', {'content': content})
+            ''' % (username, token_timeout_min)
+            return render(request, 'ss/email_success.html', {'content': content})
 
     except Exception as e:
+       if isinstance(e, ldap.UNWILLING_TO_PERFORM):
+           log.error('*** SORRY')
        log.exception(e)
        url = request.get_full_path()
        return render(request, 'ss/error.html', {'content': e, 'url': url})
@@ -164,6 +166,10 @@ def reset_password(request, token):
                     info = e.message['info']
                     desc = e.message['desc']
                     msg =  '''Unable to reset your password, %s (%s).''' % (info, desc)
+                elif isinstance(e, ldap.UNWILLING_TO_PERFORM):
+                    info = e.message['info']
+                    desc = e.message['desc']
+                    msg =  '''Unable to reset your password, %s (%s).  Please try again at a later time.''' % (info, desc)
                 elif isinstance(e, TokenException):
                     error_page='ss/token_error.html'
                     msg = e.message
