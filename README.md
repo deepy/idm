@@ -15,6 +15,9 @@ ldap_manager_cred={ Directory Manager Password }
 ldap_admin={ dn of admin user }
 ldap_cred={ admin password }
 dn={ base search dn for finding users }
+user_group={ full dn of default users group }
+
+token_timeout_min={ time in minutes }
 
 email_server={ email server host }
 email_port={ port }
