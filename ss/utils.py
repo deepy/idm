@@ -24,7 +24,7 @@ ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
 # Error Strings
 token_not_verified_error = 'The security token in the URL is invalid.  Please request a new, valid token from the password recovery link.'
 
-def set_token(host, admin, cred, dn, user):
+def set_token(host, admin, cred, dn, user, user_group):
     """
     Using the connection parameters and username, this function sets a unique token for the LDAP user.  This token will be used, in part, to verify the user requested a password recovery.
     :param host: hostname of the LDAP directory service
@@ -38,19 +38,21 @@ def set_token(host, admin, cred, dn, user):
         ldap.set_option(ldap.OPT_DEBUG_LEVEL,255)
         url = 'ldaps://%s:636' % host
         l = ldap.initialize(url)
-        log.debug("***Connecting to %s as %s %s" % (url,admin,cred))
+        log.debug("Connecting to %s as %s %s" % (url,admin,cred))
         l.simple_bind_s(admin, cred)
-        log.debug("***Bind successful***")
-        filter='uid=%s' % user
+        log.debug("Bind successful")
+        filter='(& (uid=%s) (memberOf=%s) )' % (user, user_group)
         attr=['uid', 'mail', token_attr]
         id = l.search(dn, ldap.SCOPE_SUBTREE, filter, attr)
         email = ''
         token = ''
+        groups = []
 
         # The result set should only have a single, valid entry or none
         result_type, result_data = l.result(id,1)
         if (result_data == []):
             raise ldap.LDAPError('%s not a valid user' % user)
+
         else:
             log.debug(result_data)
             record=result_data[0][1]
@@ -78,12 +80,16 @@ def set_token(host, admin, cred, dn, user):
         l.unbind_s()
         return (email, token)
 
-       
+
+    except KeyError as e:
+        log.exception(e)
+        raise Exception("Cannot change user's email at this time.")
+
     except ldap.LDAPError,e:
         log.exception(e)
         raise e
 
-def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd, token_timeout_min=60):
+def reset_passwd_by_token(host, admin, cred, dn, user, user_group, token, passwd, token_timeout_min=60):
     """
     This function validates the token, sets the user's password temporarily, and binds as the user to perform a proper password change as the user
     :param host: hostname of the LDAP directory service
@@ -96,14 +102,14 @@ def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd, token_time
     """
 
     try:
-        log.debug('*** reset password')
+        log.debug('reset_passwd_by_token for user, %s' % user)
 
         url = 'ldaps://%s:636' % host
         l = ldap.initialize(url)
         l.simple_bind_s(admin, cred)
-        filter='uid=%s' % user
+        #filter='uid=%s' % user
+        filter='(& (uid=%s) (memberOf=%s) )' % (user, user_group)
         attr=['uid', 'mail', token_attr]
-        log.debug('*** searching for user, %s' % user)
         id = l.search(dn, ldap.SCOPE_SUBTREE, filter, attr)
 
         # Get only one record from list, since there is only one user for a particular uid
@@ -120,19 +126,18 @@ def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd, token_time
 
             log.debug(userdn)
 
-            log.debug('*** found user, %s' % userdn)
+            log.debug('Found user, %s' % userdn)
             if (token == valid_token):
                 log.debug('Verified token, valid=%s and url-based=%s', valid_token, token)
 
                 # Test token for expiration
                 token_time = datetime.datetime.strptime(base64.urlsafe_b64decode(valid_token), timeformat)
-                #expire_time = datetime.timedelta(seconds=900)
                 expire_time = datetime.timedelta(minutes=token_timeout_min)
                 now = datetime.datetime.utcnow()
                 delta = now - token_time
 
                 if expire_time > delta:
-                    # RLJ - change the user's password
+                    # Change the user's password
                     l.passwd_s(userdn, None, tmp_password)
                     temp_password_set = True
                     log.debug('Changed user password to temporary password')
@@ -147,7 +152,7 @@ def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd, token_time
             else:
                 log.debug("Token not valid")
                 log.error(token_not_verified_error)
-                raise Exception(token_not_verified_error)
+                raise TokenException(token_not_verified_error)
 
         else:
             l.unbind_s()
@@ -168,12 +173,16 @@ def reset_passwd_by_token(host, admin, cred, dn, user, token, passwd, token_time
                 log.exception(e)
                 raise e
 
+    except KeyError as e:
+        log.exception(e)
+        raise Exception("Cannot change user's password at this time!")
+
     except Exception as e:
         log.exception(e)
         raise e
 
 
-def change_password(host, dn, username, old, new):
+def change_password(host, dn, admin, cred, username, user_group, old, new):
     """
     This function changes a users password from old to new.
     :param host: hostname of the LDAP directory service
@@ -185,7 +194,7 @@ def change_password(host, dn, username, old, new):
 
     ldap_url = 'ldaps://%s:636' % host
     try:
-        userdn = get_userdn(host, dn, username)
+        userdn = get_userdn(host, dn, admin, cred, username, user_group)
         log.debug('userdn = %s' % userdn)
  
         log.debug('Connecting to %s.' % ldap_url)
@@ -203,17 +212,20 @@ def send_email(server, port, local_hostname, username, password, to_addr, from_a
     """
     Utility function to send an email.
     """
-    msg = email.MIMEMultipart.MIMEMultipart()
-    msg['From'] = from_addr
-    msg['To'] = to_addr
-    msg['Subject'] = subject
-    msg.attach(email.MIMEText.MIMEText(message,'plain'))
-
-    server = smtplib.SMTP_SSL(server, port, local_hostname)
-    server.set_debuglevel(1)
-    server.login(username,password)
-    error = server.sendmail(from_addr, to_addr, msg.as_string())
-    server.quit()
+    try:
+        msg = email.MIMEMultipart.MIMEMultipart()
+        msg['From'] = from_addr
+        msg['To'] = to_addr
+        msg['Subject'] = subject
+        msg.attach(email.MIMEText.MIMEText(message,'plain'))
+        server = smtplib.SMTP_SSL(server, port, local_hostname)
+        server.set_debuglevel(1)
+        server.login(username,password)
+        error = server.sendmail(from_addr, to_addr, msg.as_string())
+        server.quit()
+    except Exception as e:
+        log.exception(e)
+        raise Exception("An error occured while attempting to send email.  Please notify the system administrators of this issue.")
 
 def record_recovery_status(user, status):
     """
@@ -227,19 +239,22 @@ def record_recovery_status(user, status):
        now = datetime.datetime.utcnow().strftime(tformat)
        wr.writerow([now, user, status])
 
-def get_userdn(host, dn, userid):
+def get_userdn(host, dn, admin, cred, userid, user_group):
     """
-    Get the user's dn anonomously, will not work if ldap will not allow anonymous searches.
+    Get the user's dn.
     param host: LDAP host
     param dn: search DN
     param userid: userid
     return: if found, the user's DN
     """
     ldap_url = 'ldaps://%s:636' % host
+    log.debug('*** %s', user_group)
     try:
         log.debug('Connecting to %s' % ldap_url)
         l = ldap.initialize(ldap_url)
-        filter='uid=%s' % userid
+        #filter='uid=%s' % userid
+        l.simple_bind_s(admin, cred)
+        filter='(& (uid=%s) (memberOf=%s) )' % (userid, user_group)
         id = l.search(dn, ldap.SCOPE_SUBTREE, filter, None)
         result_type, result_data = l.result(id,1)
     
@@ -253,5 +268,8 @@ def get_userdn(host, dn, userid):
     except ldap.LDAPError as e:
         log.exception(e)
         raise e
-    
+
+    finally:
+        log.debug('********************* unbinding')
+        l.unbind_s()
    

@@ -17,7 +17,6 @@ import urlparse
 from ss.exceptions import TokenException
 
 project_path = os.path.realpath(os.path.dirname(__file__))
-#project_path='/django/idm/ss/'
 config_file = os.path.join(project_path, 'config.ini')
 
 config_parser = ConfigParser.ConfigParser()
@@ -27,6 +26,7 @@ ldap_host = config_parser.get('default', 'ldap_host')
 ldap_admin = config_parser.get('default', 'ldap_admin')
 ldap_cred = config_parser.get('default', 'ldap_cred')
 ldap_dn = config_parser.get('default', 'dn')
+ldap_user_group = config_parser.get('default', 'user_group')
 
 email_server = config_parser.get('default', 'email_server')
 email_port = config_parser.get('default', 'email_port')
@@ -38,8 +38,6 @@ email_fromaddr = config_parser.get('default', 'email_fromaddr')
 token_timeout_min = config_parser.getint('default', 'token_timeout_min')
 
 # Set up logging
-# log_file = os.path.join(project_path, 'password-recover.log')
-
 log = logging.getLogger(__name__)
 
 def index(request):
@@ -63,28 +61,19 @@ def send_recovery_email(request):
 
         if form.is_valid():
             username = form.cleaned_data.get('username')
-            email, token = utils.set_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username)
+            email, token = utils.set_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, ldap_user_group)
             subject = 'Password Recovery'
             full_path = request.get_full_path()
             parsed_url = urlparse.urlparse(full_path)
 
             pathparts = str.split(str(parsed_url.path),'/')
-
-            #RLJ
-            #pathparts = pathparts[0:len(pathparts)-1]
             baseurl = '/'.join(pathparts)
-
-            #basepath = '/'.join(pathparts)
-            #baseurl = '%s://%s/%s' % (urlparts.scheme, urlparts.netloc, basepath)
-            # RLJ TODO, hardcoded the https since behind a proxy with only
-            # https, need to learn how to interrogate the request to learn
-            # if behind proxy.
 
             token_timeout = token_timeout_min
             token_timeout_units = 'minutes'
 
             if (token_timeout_min > 60):
-                #token_timeout = token_timeout_min/60
+                token_timeout = token_timeout_min/60
                 token_timeout_units = 'hours'
 
             message = '''
@@ -93,20 +82,21 @@ If you did not request this, please contact the administrators of the system.
 If you did, you can complete the recovery process by clicking on the following link...
 https://%s%s%s
 
-This link will expire within %d minutes.
-            ''' % (request.get_host(), baseurl, token, token_timeout_min)
+This link will expire within %d %s.
+            ''' % (request.get_host(), baseurl, token, token_timeout, token_timeout_units)
             log.error(message)
+
+            #IF DEBUG, COMMENT OUT NEXT LINE
             #utils.send_email(email_server, email_port, email_local_hostname, email_username, email_password, email, email_fromaddr, subject, message)
+
             content = '''
 Sent to email address associated with user, %s.
 
-NOTE: The link in the email will expire in %d minutes.
-            ''' % (username, token_timeout_min)
+NOTE: The link in the email will expire in %d %s.
+            ''' % (username, token_timeout, token_timeout_units)
             return render(request, 'ss/email_success.html', {'content': content})
 
     except Exception as e:
-       if isinstance(e, ldap.UNWILLING_TO_PERFORM):
-           log.error('*** SORRY')
        log.exception(e)
        url = request.get_full_path()
        return render(request, 'ss/error.html', {'content': e, 'url': url})
@@ -123,7 +113,6 @@ def reset_password(request, token):
         confirm = forms.CharField(label='Confirm Password:', required=True, widget=forms.PasswordInput)
 
         def clean(self):
-            # cleaned_data = super(ResetPasswordForm, self).clean()
             username = self.cleaned_data.get("username")
             passwd = self.cleaned_data.get("passwd")
             confirm = self.cleaned_data.get("confirm")
@@ -138,8 +127,8 @@ def reset_password(request, token):
 
     if request.method == 'GET':
         form = ResetPasswordForm()
-    elif request.method == 'POST':
 
+    elif request.method == 'POST':
         form = ResetPasswordForm(request.POST)
 
         if form.is_valid():
@@ -147,16 +136,17 @@ def reset_password(request, token):
             username = form.cleaned_data.get('username')
             password = form.cleaned_data.get('passwd') 
             confirm = form.cleaned_data.get('confirm')
+
             try:
                 log.debug('Reseting %s with token %s' % (username, token))
-                utils.reset_passwd_by_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, token, password, token_timeout_min)
-                log.debug("*** recovered success.")
+                utils.reset_passwd_by_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, ldap_user_group, token, password, token_timeout_min)
+                log.debug("Recovered success, for %s." % (username))
                 utils.record_recovery_status(username, 'RESET')
                 return render(request, 'ss/recovered_success.html')
+
             except Exception as e:
                 err = 'Failed to reset password for %s.  The caught exception was %s' % (username, e.message)
                 log.exception(err)
-                #log.error(e.__class__.__name__)
                 info=''
                 desc=''
                 msg=''
@@ -166,19 +156,23 @@ def reset_password(request, token):
                     info = e.message['info']
                     desc = e.message['desc']
                     msg =  '''Unable to reset your password, %s (%s).''' % (info, desc)
+
                 elif isinstance(e, ldap.UNWILLING_TO_PERFORM):
                     info = e.message['info']
                     desc = e.message['desc']
                     msg =  '''Unable to reset your password, %s (%s).  Please try again at a later time.''' % (info, desc)
+
                 elif isinstance(e, TokenException):
                     error_page='ss/token_error.html'
                     msg = e.message
+
                 else:
                     error_page='ss/token_error.html'
                     msg = e.message
 
                 try:
                     utils.record_recovery_status(username, 'ERROR: ' + str(e.message))
+
                 except Exception as e:
                     log.exception(e)
 
@@ -220,7 +214,7 @@ def change_password(request):
                 username = form.cleaned_data.get('username')
                 old = form.cleaned_data.get('old_passwd')
                 new = form.cleaned_data.get('passwd')
-                utils.change_password(ldap_host, ldap_dn, username, old, new)
+                utils.change_password(ldap_host, ldap_dn, ldap_admin, ldap_cred, username, ldap_user_group, old, new)
                 return render(request, 'ss/password_change_success.html')
 
             except Exception as e:
