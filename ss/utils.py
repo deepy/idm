@@ -78,6 +78,9 @@ def set_token(host, admin, cred, dn, user, user_group):
         # RLJ consider using the _ext_s for LDAPv3, synchronous
 
         l.unbind_s()
+
+        # RLJ change the token for the email URL
+        token = token.replace('=', '%3D')
         return (email, token)
 
 
@@ -127,6 +130,7 @@ def reset_passwd_by_token(host, admin, cred, dn, user, user_group, token, passwd
             log.debug(userdn)
 
             log.debug('Found user, %s' % userdn)
+            log.debug('Security token, valid=%s and url-based=%s', valid_token, token)
             if (token == valid_token):
                 log.debug('Verified token, valid=%s and url-based=%s', valid_token, token)
 
