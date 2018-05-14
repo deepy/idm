@@ -15,7 +15,7 @@ ldap_manager_cred={ Directory Manager Password }
 ldap_admin={ dn of admin user }
 ldap_cred={ admin password }
 dn={ base search dn for finding users }
-user_group={ full dn of default users group }
+user_filter={ LDAP filter to use, e.g. memberOf=foobar }
 
 token_timeout_min={ time in minutes }
 

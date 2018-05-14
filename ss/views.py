@@ -26,7 +26,7 @@ ldap_host = config_parser.get('default', 'ldap_host')
 ldap_admin = config_parser.get('default', 'ldap_admin')
 ldap_cred = config_parser.get('default', 'ldap_cred')
 ldap_dn = config_parser.get('default', 'dn')
-ldap_user_group = config_parser.get('default', 'user_group')
+ldap_user_filter = config_parser.get('default', 'user_filter')
 
 email_server = config_parser.get('default', 'email_server')
 email_port = config_parser.get('default', 'email_port')
@@ -61,7 +61,7 @@ def send_recovery_email(request):
 
         if form.is_valid():
             username = form.cleaned_data.get('username')
-            email, token = utils.set_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, ldap_user_group)
+            email, token = utils.set_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, ldap_user_filter)
             subject = 'Password Recovery'
             full_path = request.get_full_path()
             parsed_url = urlparse.urlparse(full_path)
@@ -139,7 +139,7 @@ def reset_password(request, token):
 
             try:
                 log.debug('Reseting %s with token %s' % (username, token))
-                utils.reset_passwd_by_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, ldap_user_group, token, password, token_timeout_min)
+                utils.reset_passwd_by_token(ldap_host, ldap_admin, ldap_cred, ldap_dn, username, ldap_user_filter, token, password, token_timeout_min)
                 log.debug("Recovered success, for %s." % (username))
                 utils.record_recovery_status(username, 'RESET')
                 return render(request, 'ss/recovered_success.html')
@@ -214,7 +214,7 @@ def change_password(request):
                 username = form.cleaned_data.get('username')
                 old = form.cleaned_data.get('old_passwd')
                 new = form.cleaned_data.get('passwd')
-                utils.change_password(ldap_host, ldap_dn, ldap_admin, ldap_cred, username, ldap_user_group, old, new)
+                utils.change_password(ldap_host, ldap_dn, ldap_admin, ldap_cred, username, ldap_user_filter, old, new)
                 return render(request, 'ss/password_change_success.html')
 
             except Exception as e:

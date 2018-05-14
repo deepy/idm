@@ -24,7 +24,7 @@ ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
 # Error Strings
 token_not_verified_error = 'The security token in the URL is invalid.  Please request a new, valid token from the password recovery link.'
 
-def set_token(host, admin, cred, dn, user, user_group):
+def set_token(host, admin, cred, dn, user, user_filter):
     """
     Using the connection parameters and username, this function sets a unique token for the LDAP user.  This token will be used, in part, to verify the user requested a password recovery.
     :param host: hostname of the LDAP directory service
@@ -41,7 +41,7 @@ def set_token(host, admin, cred, dn, user, user_group):
         log.debug("Connecting to %s as %s %s" % (url,admin,cred))
         l.simple_bind_s(admin, cred)
         log.debug("Bind successful")
-        filter='(& (uid=%s) (memberOf=%s) )' % (user, user_group)
+        filter='(& (uid=%s) (%s) )' % (user, user_filter)
         attr=['uid', 'mail', token_attr]
         id = l.search(dn, ldap.SCOPE_SUBTREE, filter, attr)
         email = ''
@@ -92,7 +92,7 @@ def set_token(host, admin, cred, dn, user, user_group):
         log.exception(e)
         raise e
 
-def reset_passwd_by_token(host, admin, cred, dn, user, user_group, token, passwd, token_timeout_min=60):
+def reset_passwd_by_token(host, admin, cred, dn, user, user_filter, token, passwd, token_timeout_min=60):
     """
     This function validates the token, sets the user's password temporarily, and binds as the user to perform a proper password change as the user
     :param host: hostname of the LDAP directory service
@@ -110,8 +110,7 @@ def reset_passwd_by_token(host, admin, cred, dn, user, user_group, token, passwd
         url = host
         l = ldap.initialize(url)
         l.simple_bind_s(admin, cred)
-        #filter='uid=%s' % user
-        filter='(& (uid=%s) (memberOf=%s) )' % (user, user_group)
+        filter='(& (uid=%s) (%s) )' % (user, user_filter)
         attr=['uid', 'mail', token_attr]
         id = l.search(dn, ldap.SCOPE_SUBTREE, filter, attr)
 
@@ -186,7 +185,7 @@ def reset_passwd_by_token(host, admin, cred, dn, user, user_group, token, passwd
         raise e
 
 
-def change_password(host, dn, admin, cred, username, user_group, old, new):
+def change_password(host, dn, admin, cred, username, user_filter, old, new):
     """
     This function changes a users password from old to new.
     :param host: hostname of the LDAP directory service
@@ -198,7 +197,7 @@ def change_password(host, dn, admin, cred, username, user_group, old, new):
 
     ldap_url = host
     try:
-        userdn = get_userdn(host, dn, admin, cred, username, user_group)
+        userdn = get_userdn(host, dn, admin, cred, username, user_filter)
         log.debug('userdn = %s' % userdn)
  
         log.debug('Connecting to %s.' % ldap_url)
@@ -243,7 +242,7 @@ def record_recovery_status(user, status):
        now = datetime.datetime.utcnow().strftime(tformat)
        wr.writerow([now, user, status])
 
-def get_userdn(host, dn, admin, cred, userid, user_group):
+def get_userdn(host, dn, admin, cred, userid, user_filter):
     """
     Get the user's dn.
     param host: LDAP host
@@ -252,13 +251,12 @@ def get_userdn(host, dn, admin, cred, userid, user_group):
     return: if found, the user's DN
     """
     ldap_url = host
-    log.debug('*** %s', user_group)
+    log.debug('*** %s', user_filter)
     try:
         log.debug('Connecting to %s' % ldap_url)
         l = ldap.initialize(ldap_url)
-        #filter='uid=%s' % userid
         l.simple_bind_s(admin, cred)
-        filter='(& (uid=%s) (memberOf=%s) )' % (userid, user_group)
+        filter='(& (uid=%s) (%s) )' % (userid, user_filter)
         id = l.search(dn, ldap.SCOPE_SUBTREE, filter, None)
         result_type, result_data = l.result(id,1)
     
