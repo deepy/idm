@@ -36,7 +36,7 @@ def set_token(host, admin, cred, dn, user, user_group):
 
     try:
         ldap.set_option(ldap.OPT_DEBUG_LEVEL,255)
-        url = 'ldaps://%s:636' % host
+        url = host
         l = ldap.initialize(url)
         log.debug("Connecting to %s as %s %s" % (url,admin,cred))
         l.simple_bind_s(admin, cred)
@@ -107,7 +107,7 @@ def reset_passwd_by_token(host, admin, cred, dn, user, user_group, token, passwd
     try:
         log.debug('reset_passwd_by_token for user, %s' % user)
 
-        url = 'ldaps://%s:636' % host
+        url = host
         l = ldap.initialize(url)
         l.simple_bind_s(admin, cred)
         #filter='uid=%s' % user
@@ -196,7 +196,7 @@ def change_password(host, dn, admin, cred, username, user_group, old, new):
     :param new: new password
     """
 
-    ldap_url = 'ldaps://%s:636' % host
+    ldap_url = host
     try:
         userdn = get_userdn(host, dn, admin, cred, username, user_group)
         log.debug('userdn = %s' % userdn)
@@ -251,7 +251,7 @@ def get_userdn(host, dn, admin, cred, userid, user_group):
     param userid: userid
     return: if found, the user's DN
     """
-    ldap_url = 'ldaps://%s:636' % host
+    ldap_url = host
     log.debug('*** %s', user_group)
     try:
         log.debug('Connecting to %s' % ldap_url)

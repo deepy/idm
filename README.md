@@ -9,7 +9,7 @@ The ss application depends on a config.ini configuration file that keeps sensiti
 ```
 [default]
 
-ldap_host={ enter host here }
+ldap_host=ldap://your-host-here:389
 ldap_manager={ dn of Directory Manager }
 ldap_manager_cred={ Directory Manager Password }
 ldap_admin={ dn of admin user }
@@ -21,9 +21,9 @@ token_timeout_min={ time in minutes }
 
 email_server={ email server host }
 email_port={ port }
-email_local_hostname{ email local hostname }
+email_local_hostname={ email local hostname }
 
-email_username= { username }
+email_username={ username }
 email_password={ password }
 email_fromaddr={ from addr }
 
