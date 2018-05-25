@@ -49,7 +49,7 @@ def send_recovery_email(request):
     This function generates an email with a URL link that allows the user to perform a password recovery and reset.
     """
     class PasswordRecoveryForm(forms.Form):
-        username = forms.CharField(label='Enter your username:', validators=[RegexValidator('^[a-zA-Z0-9]*$', message='Invalid username', code='invalid_username')])
+        username = forms.CharField(label='Enter your username:', validators=[RegexValidator('^[a-zA-Z0-9\.]*$', message='Invalid username', code='invalid_username')])
 
     try:
         if request.method == 'GET':
@@ -108,7 +108,7 @@ def reset_password(request, token):
     Using the unique token supplied, this function allows the user to set his/her password without knowing their previous password.  Between the token and valid username, the user will be able to set his/her password.
     """
     class ResetPasswordForm(forms.Form):
-        username = forms.CharField(label='Enter your username:', required=True, validators=[RegexValidator('^[a-zA-Z0-9]*$', message='Invalid username', code='invalid_username')],)
+        username = forms.CharField(label='Enter your username:', required=True, validators=[RegexValidator('^[a-zA-Z0-9\.]*$', message='Invalid username', code='invalid_username')],)
         passwd = forms.CharField(label='New Password:', required=True, widget=forms.PasswordInput)
         confirm = forms.CharField(label='Confirm Password:', required=True, widget=forms.PasswordInput)
 
@@ -185,7 +185,7 @@ def change_password(request):
     This function changes the user's password using user inputs of username, current password, and new password with confirmation.
     """
     class ChangePasswordForm(forms.Form):
-        username = forms.CharField(label='Enter your username:', validators=[RegexValidator('^[a-zA-Z0-9]*$', message='Invalid username', code='invalid_username')])
+        username = forms.CharField(label='Enter your username:', validators=[RegexValidator('^[a-zA-Z0-9\.]*$', message='Invalid username', code='invalid_username')])
         old_passwd  = forms.CharField(label='Current Password:', widget=forms.PasswordInput)
         passwd  = forms.CharField(label='New Password:', widget=forms.PasswordInput)
         confirm = forms.CharField(label='Confirm Password:', widget=forms.PasswordInput)
